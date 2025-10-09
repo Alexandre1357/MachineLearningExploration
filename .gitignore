@@ -208,3 +208,6 @@ __marimo__/
 
 # Experiments and log data
 experiments/
+
+# Ignore assets for now
+assets/
