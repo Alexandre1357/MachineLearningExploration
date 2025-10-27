@@ -55,3 +55,34 @@ class Siren(nn.Module):
     
     def forward(self, x):
         return self.net(x)
+
+class NeuTex(nn.Module):
+    def __init__(self, resolution, embedding_channels, bound=10e-4):
+        super().__init__()
+        self.resolution = resolution
+        self.embedding_channels = embedding_channels
+        tex = torch.empty((1, embedding_channels, resolution, resolution), dtype=torch.float32, requires_grad=True)
+        torch.nn.init.uniform_(tex, a=-bound, b=bound)
+        self.tex = nn.Parameter(tex)
+    
+    def forward(self, uvs):
+        channels = torch.nn.functional.grid_sample(self.tex, uvs, mode='nearest', padding_mode='zeros', align_corners=True)
+        channels = channels.permute(0, 2, 3, 1).reshape(-1, self.embedding_channels)
+
+        return channels
+
+class SirenTex(nn.Module):
+    def __init__(self, resolution, embedding_channels, hidden_features, hidden_layers, out_features, outermost_linear=False, 
+                 first_omega_0=30, hidden_omega_0=30):
+        super().__init__()
+        self.resolution = resolution
+        self.embedding_channels = embedding_channels
+
+        self.neu_tex = NeuTex(resolution, embedding_channels)
+
+        self.siren_net = Siren(embedding_channels, hidden_features, hidden_layers, out_features, outermost_linear, 
+                               first_omega_0, hidden_omega_0)
+        
+    def forward(self, uvs):
+        net_input = self.neu_tex(uvs)
+        return self.siren_net(net_input), net_input
