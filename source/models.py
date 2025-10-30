@@ -70,7 +70,7 @@ class NeuTex(nn.Module):
         channels = channels.permute(0, 2, 3, 1).reshape(-1, self.embedding_channels)
 
         return channels
-
+    
 class SirenTex(nn.Module):
     def __init__(self, resolution, embedding_channels, hidden_features, hidden_layers, out_features, outermost_linear=False, 
                  first_omega_0=30, hidden_omega_0=30):
@@ -81,6 +81,57 @@ class SirenTex(nn.Module):
         self.neu_tex = NeuTex(resolution, embedding_channels)
 
         self.siren_net = Siren(embedding_channels, hidden_features, hidden_layers, out_features, outermost_linear, 
+                               first_omega_0, hidden_omega_0)
+        
+    def forward(self, uvs):
+        net_input = self.neu_tex(uvs)
+        return self.siren_net(net_input), net_input
+    
+class BCNeuTex(nn.Module):
+    def __init__(self, resolution, block_sidelength, block_embedding_channels, pixel_embedding_channels, mode='nearest', bound=10e-4):
+        super().__init__()
+
+        self.mode = mode
+        self.block_sidelength = block_sidelength
+
+        while resolution % self.block_sidelength != 0:
+            self.block_sidelength -= 1
+
+        self.width_in_blocks = int(resolution / self.block_sidelength)
+        self.width_in_pixels = resolution
+        
+        self.block_embedding_channels = block_embedding_channels
+        self.pixel_embedding_channels = pixel_embedding_channels
+
+        block_tex = torch.empty((1, self.block_embedding_channels, self.width_in_blocks, self.width_in_blocks), dtype=torch.float32, requires_grad=True)
+        torch.nn.init.uniform_(block_tex, a=-bound, b=bound)
+        self.block_tex = nn.Parameter(block_tex)
+        
+        pixel_tex = torch.empty((1, self.pixel_embedding_channels, self.width_in_pixels, self.width_in_pixels), dtype=torch.float32, requires_grad=True)
+        torch.nn.init.uniform_(pixel_tex, a=-bound, b=bound)
+        self.pixel_tex = nn.Parameter(pixel_tex)
+    
+    def forward(self, uvs):
+        block_channels = torch.nn.functional.grid_sample(self.block_tex, uvs, mode=self.mode, padding_mode='zeros', align_corners=True)
+        block_channels = block_channels.permute(0, 2, 3, 1).reshape(-1, self.block_embedding_channels)
+
+        pixel_channels = torch.nn.functional.grid_sample(self.pixel_tex, uvs, mode=self.mode, padding_mode='zeros', align_corners=True)
+        pixel_channels = pixel_channels.permute(0, 2, 3, 1).reshape(-1, self.pixel_embedding_channels)
+
+        channels = torch.cat((block_channels, pixel_channels), 1)
+
+        return channels
+    
+class SirenBCTex(nn.Module):
+    def __init__(self, resolution, block_sidelength, block_embedding_channels, pixel_embedding_channels, hidden_features, hidden_layers, out_features, mode='nearest', outermost_linear=False, 
+                 first_omega_0=30, hidden_omega_0=30):
+        super().__init__()
+        self.resolution = resolution
+        self.pixel_embedding_channels = pixel_embedding_channels
+
+        self.neu_tex = BCNeuTex(resolution, block_sidelength, block_embedding_channels, pixel_embedding_channels, mode=mode)
+
+        self.siren_net = Siren(block_embedding_channels + pixel_embedding_channels, hidden_features, hidden_layers, out_features, outermost_linear, 
                                first_omega_0, hidden_omega_0)
         
     def forward(self, uvs):
