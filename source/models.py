@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from torch import nn
+import math
 
 class SineLayer(nn.Module):    
     def __init__(self, in_features, out_features, bias=True,
@@ -66,6 +67,8 @@ class NeuTex(nn.Module):
         self.tex = nn.Parameter(tex)
     
     def forward(self, uvs):
+        # I have no clue why the shape of this needs to be N H W 2
+        # it complains if the N is different but the H and W don't even have to match the input
         channels = torch.nn.functional.grid_sample(self.tex, uvs, mode='nearest', padding_mode='zeros', align_corners=True)
         channels = channels.permute(0, 2, 3, 1).reshape(-1, self.embedding_channels)
 
@@ -84,8 +87,8 @@ class SirenTex(nn.Module):
                                first_omega_0, hidden_omega_0)
         
     def forward(self, uvs):
-        net_input = self.neu_tex(uvs)
-        return self.siren_net(net_input), net_input
+        net_input = self.neu_tex(uvs.reshape((1, 1, -1, 2)))
+        return self.siren_net(net_input)
     
 class BCNeuTex(nn.Module):
     def __init__(self, resolution, block_sidelength, block_embedding_channels, pixel_embedding_channels, mode='nearest', bound=10e-4):
@@ -135,5 +138,5 @@ class SirenBCTex(nn.Module):
                                first_omega_0, hidden_omega_0)
         
     def forward(self, uvs):
-        net_input = self.neu_tex(uvs)
-        return self.siren_net(net_input), net_input
+        net_input = self.neu_tex(uvs.reshape((1, 1, -1, 2)))
+        return self.siren_net(net_input)
