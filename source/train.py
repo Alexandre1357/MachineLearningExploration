@@ -4,6 +4,7 @@ import flip_loss
 import matplotlib.pyplot as plt
 import torchmetrics
 from IPython.display import clear_output
+import time
 
 def psnr(y_pred, y, data_range):
     dim = tuple(range(1, y.ndim))
@@ -93,7 +94,7 @@ def output_test_data(writer, albedo_pred, arm_pred, normal_pred, albedo_flip, ar
     writer.add_scalar('ms-ssim/albedo', msssim_albedo, current_epoch_arg)
     writer.add_scalar('ms-ssim/arm', msssim_arm, current_epoch_arg)
     writer.add_scalar('ms-ssim/normal', msssim_normal, current_epoch_arg)
-    
+
     albedo_image = np.clip(albedo_pred.numpy(), 0.0, 1.0)
     arm_image = np.clip(arm_pred.numpy(), 0.0, 1.0)
     normal_image = np.clip(normal_pred.numpy(), 0.0, 1.0)
@@ -127,7 +128,7 @@ def training_loop(model, optimizer, dataloader, writer, loss_fn, num_epochs, cur
     albedo_data = output_features[..., :3]
     arm_data = output_features[..., 3:6]
     normal_data = output_features[..., 6:]
-    
+
     for epoch_idx in range(num_epochs):        
         current_epoch_loc = current_epoch + epoch_idx
         
@@ -138,6 +139,8 @@ def training_loop(model, optimizer, dataloader, writer, loss_fn, num_epochs, cur
         if epoch_idx != 0 or current_epoch_loc == 0:
             output_test_data(writer, albedo_pred, arm_pred, normal_pred, albedo_flip, arm_flip, 
                              normal_flip, albedo_data, arm_data, normal_data, current_epoch_loc)
+            
+        start = time.process_time()
 
         print(f"epoch: {current_epoch_loc:>3d}")
         
@@ -156,6 +159,12 @@ def training_loop(model, optimizer, dataloader, writer, loss_fn, num_epochs, cur
                 print(f"loss: {loss.item():>7f} [{(batch_idx * dataloader.batch_size + len(input_tensor)):>5d}/{data_size:>5d}]")
 
         writer.flush()
+
+        end = time.process_time()
+
+        writer.add_scalar('epoch time', end - start, current_epoch_loc)
+
+        
 
     clear_output(wait=True)
 
